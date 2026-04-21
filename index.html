@@ -295,7 +295,38 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
 <script>
 // ========== ESTADO ==========
 let uploadedFiles = [];
-let allHistory = JSON.parse(localStorage.getItem('dashboard_history') || '[]');
+let allHistory = [];
+let acordos = [];
+let kvReady = false;
+
+// ========== STORAGE (Upstash KV via /api/kv) ==========
+async function kvGet(key) {
+  try {
+    const r = await fetch('/api/kv?key=' + encodeURIComponent(key));
+    const d = await r.json();
+    return d.value || null;
+  } catch { return null; }
+}
+
+async function kvSet(key, value) {
+  try {
+    await fetch('/api/kv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+  } catch(e) { console.error('KV save error:', e); }
+}
+
+async function loadAllData() {
+  const [hist, ac] = await Promise.all([
+    kvGet('dashboard_history'),
+    kvGet('acordos_v1')
+  ]);
+  allHistory = hist || [];
+  acordos = ac || [];
+  kvReady = true;
+}
 
 // ========== NAVEGAÇÃO ==========
 function showPage(name) {
@@ -453,11 +484,11 @@ async function processFiles() {
       throw new Error('Erro ao parsear: ' + parseErr.message + ' | Inicio: ' + rawText.slice(0,100));
     }
 
-    // Salvar no histórico
+    // Salvar no histórico via KV
     dashData.processedAt = new Date().toISOString();
     dashData.fileNames = uploadedFiles.map(f => f.name);
     allHistory.unshift(dashData);
-    localStorage.setItem('dashboard_history', JSON.stringify(allHistory));
+    await kvSet('dashboard_history', allHistory);
 
     // Mostrar sucesso e ir para dashboard
     setStep('build', 'done');
@@ -809,10 +840,10 @@ function loadHistorico(i) {
 }
 
 // ========== ACORDOS ==========
-let acordos = JSON.parse(localStorage.getItem('acordos_v1') || '[]');
+// acordos carregados via KV
 
 function saveAcordos() {
-  localStorage.setItem('acordos_v1', JSON.stringify(acordos));
+  kvSet('acordos_v1', acordos);
 }
 
 function showNovoAcordo() {
@@ -993,7 +1024,17 @@ function getAReceber() {
 }
 
 // ========== INIT ==========
-renderDashboard();
+// Mostrar loading enquanto carrega dados do KV
+document.getElementById('no-data-msg').innerHTML = `
+  <div style="font-size:40px;margin-bottom:16px">⏳</div>
+  <div style="font-size:16px;font-weight:500;margin-bottom:8px">Carregando dados...</div>
+  <div style="font-size:13px;color:var(--text2)">Buscando seu histórico na nuvem</div>
+`;
+loadAllData().then(() => {
+  renderDashboard();
+  renderAcordos();
+  renderHistorico();
+});
 </script>
 </body>
 </html>
