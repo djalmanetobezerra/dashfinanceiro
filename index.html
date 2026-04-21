@@ -318,21 +318,39 @@ async function processFiles() {
 
   try {
     setStep('read', 'active');
-    // Ler PDFs como base64
-    const pdfContents = await Promise.all(uploadedFiles.map(f => readFileAsBase64(f)));
-    await sleep(600);
+    // Ler PDFs como base64 um por vez
+    const pdfContents = [];
+    for (const f of uploadedFiles) {
+      pdfContents.push({ name: f.name, data: await readFileAsBase64(f) });
+    }
+    await sleep(400);
 
     setStep('analyze', 'active');
-    // Construir mensagem para Claude
-    const userContent = [];
-    for (let i = 0; i < uploadedFiles.length; i++) {
-      userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfContents[i] } });
+    // Passo 1: extrair texto de cada PDF individualmente (chamadas leves)
+    const extractedTexts = [];
+    for (let i = 0; i < pdfContents.length; i++) {
+      setStep('analyze', 'active', `Lendo ${pdfContents[i].name} (${i+1}/${pdfContents.length})...`);
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5',
+          max_tokens: 2000,
+          messages: [{ role: 'user', content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfContents[i].data } },
+            { type: 'text', text: 'Extraia APENAS os dados financeiros numéricos deste extrato em formato de texto simples: saldos, entradas, saídas, e lista de transações com data/valor/descrição. Seja conciso.' }
+          ]}]
+        })
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'Erro lendo PDF'); }
+      const d = await r.json();
+      extractedTexts.push(pdfContents[i].name + ':\n' + d.content[0].text);
+      await sleep(200);
     }
-    userContent.push({ type: 'text', text: ANALYSIS_PROMPT });
 
     setStep('categorize', 'active');
-
-    // Chamar API Claude
+    // Passo 2: consolidar e gerar JSON a partir dos textos extraídos (sem PDFs, menor payload)
+    const consolidatedText = extractedTexts.join('\n\n---\n\n');
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -340,7 +358,7 @@ async function processFiles() {
         model: 'claude-sonnet-4-5',
         max_tokens: 4000,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userContent }]
+        messages: [{ role: 'user', content: 'Com base nos dados abaixo extraídos dos extratos, gere o JSON do dashboard:\n\n' + consolidatedText + '\n\n' + ANALYSIS_PROMPT }]
       })
     });
 
@@ -430,7 +448,7 @@ Você conhece o perfil financeiro do usuário:
 - Contas a receber: Gilson R$15.000 (parcelas 29/04, 06/05, 13/05, 20/05)
 Responda SEMPRE com um JSON válido dentro de blocos \`\`\`json ... \`\`\``;
 
-const ANALYSIS_PROMPT = `Analise os extratos PDF anexados e retorne um JSON com a seguinte estrutura exata:
+const ANALYSIS_PROMPT = `Analise os PDFs e retorne SOMENTE um bloco JSON válido. Nada antes, nada depois, sem explicações.
 
 \`\`\`json
 {
@@ -438,81 +456,69 @@ const ANALYSIS_PROMPT = `Analise os extratos PDF anexados e retorne um JSON com 
   "dataGeracao": "20/04/2026",
   "parcial": true,
   "usd_brl": 4.98,
-  "patrimonio": {
-    "total": 47015,
-    "btg_corrente": 8388,
-    "cdb_liquido": 18002,
-    "payoneer_brl": 5625,
-    "a_receber": 15000
-  },
-  "resumo": {
-    "receita": 57400,
-    "gastos_pessoais": 14500,
-    "investido": 18000,
-    "emprestimos_concedidos": 15000
-  },
+  "patrimonio": {"total": 0, "btg_corrente": 0, "cdb_liquido": 0, "payoneer_brl": 0, "a_receber": 0},
+  "resumo": {"receita": 0, "gastos_pessoais": 0, "investido": 0, "emprestimos_concedidos": 0},
   "contas": [
-    { "nome": "BTG DBLN", "descricao": "Conta corrente", "saldo": 8388, "entradas": 53728, "saidas": 45341 },
-    { "nome": "Payoneer USD", "descricao": "Cartão internacional", "saldo_usd": 1129.64, "saldo_brl": 5625 },
-    { "nome": "Nubank BF", "descricao": "Encerrando", "saldo": 1.59 }
+    {"nome": "BTG DBLN", "descricao": "Conta corrente", "saldo": 0, "entradas": 0, "saidas": 0},
+    {"nome": "Payoneer USD", "descricao": "Cartao internacional", "saldo_usd": 0, "saldo_brl": 0},
+    {"nome": "Nubank BF", "descricao": "Encerrando", "saldo": 0}
   ],
   "categorias_btg": [
-    { "nome": "Casa / moradia", "valor": 4494, "cor": "teal" },
-    { "nome": "Móveis / decoração", "valor": 5048, "cor": "amber" },
-    { "nome": "Alimentação", "valor": 1780, "cor": "teal" },
-    { "nome": "Transporte", "valor": 395, "cor": "teal" },
-    { "nome": "Pessoal / compras", "valor": 384, "cor": "amber" },
-    { "nome": "Saúde", "valor": 59, "cor": "purple" },
-    { "nome": "Beleza / bem-estar", "valor": 150, "cor": "purple" },
-    { "nome": "Transferências PJ", "valor": 4302, "cor": "gray" }
+    {"nome": "Casa / moradia", "valor": 0, "cor": "teal"},
+    {"nome": "Alimentacao", "valor": 0, "cor": "teal"},
+    {"nome": "Transporte", "valor": 0, "cor": "teal"},
+    {"nome": "Moveis / decoracao", "valor": 0, "cor": "amber"},
+    {"nome": "Pessoal / compras", "valor": 0, "cor": "amber"},
+    {"nome": "Saude", "valor": 0, "cor": "purple"},
+    {"nome": "Beleza / bem-estar", "valor": 0, "cor": "purple"},
+    {"nome": "Transferencias PJ", "valor": 0, "cor": "gray"}
   ],
   "categorias_payoneer": [
-    { "nome": "Alimentação", "valor_usd": 214, "cor": "teal" },
-    { "nome": "Assinaturas digitais", "valor_usd": 69, "cor": "purple" },
-    { "nome": "Transporte", "valor_usd": 35, "cor": "teal" },
-    { "nome": "Compras / serv.", "valor_usd": 24, "cor": "amber" }
+    {"nome": "Alimentacao", "valor_usd": 0, "cor": "teal"},
+    {"nome": "Assinaturas digitais", "valor_usd": 0, "cor": "purple"},
+    {"nome": "Transporte", "valor_usd": 0, "cor": "teal"},
+    {"nome": "Compras", "valor_usd": 0, "cor": "amber"}
   ],
   "contas_fixas": [
-    { "nome": "Energia (Equatorial)", "dia": 1, "previsto": 261, "pago": 304, "status": "pago" },
-    { "nome": "Aluguel (Chirley)", "dia": 2, "previsto": 1875, "pago": 1875, "status": "pago" },
-    { "nome": "Ipanema (PaguéVeloz)", "dia": 2, "previsto": 78, "pago": 81, "status": "pago" },
-    { "nome": "YouTube Premium", "dia": 4, "previsto": 54, "pago_usd": 10.83, "status": "pago" },
-    { "nome": "Carro (Localiza)", "dia": 7, "previsto": 1991, "pago_usd": 406.76, "status": "pago" },
-    { "nome": "CapCut", "dia": 7, "previsto": 66, "pago_usd": 13.24, "status": "pago" },
-    { "nome": "Celular — 9/12 (Charles)", "dia": 8, "previsto": 428, "pago": 427.5, "status": "pago" },
-    { "nome": "Claro", "dia": 10, "previsto": 260, "pago": 272, "status": "pago" },
-    { "nome": "ChatGPT", "dia": 10, "previsto": 120, "pago_usd": 19.34, "status": "pago" },
-    { "nome": "Claude", "dia": 16, "previsto_usd": 22.90, "pago_usd": 22.90, "status": "pago" },
-    { "nome": "Remédio Mainha", "dia": 20, "previsto": 220, "pago": 220, "status": "pago" },
-    { "nome": "Empréstimo Mayara — 10/12", "dia": 20, "previsto": 468, "pago": 468.22, "status": "pago" },
-    { "nome": "Academia", "dia": 15, "previsto": 135, "pago": null, "status": "pendente" },
-    { "nome": "Canva", "dia": 24, "previsto": 35, "pago": null, "status": "pendente" },
-    { "nome": "Google One", "dia": 25, "previsto": 10, "pago": null, "status": "pendente" },
-    { "nome": "Barbearia", "dia": 31, "previsto": 130, "pago": null, "status": "pendente" }
+    {"nome": "Energia", "dia": 1, "previsto": 261, "pago": null, "status": "pendente"},
+    {"nome": "Aluguel Chirley", "dia": 2, "previsto": 1875, "pago": null, "status": "pendente"},
+    {"nome": "Ipanema PaguéVeloz", "dia": 2, "previsto": 78, "pago": null, "status": "pendente"},
+    {"nome": "YouTube Premium", "dia": 4, "previsto": 54, "pago_usd": null, "status": "pendente"},
+    {"nome": "Carro Localiza", "dia": 7, "previsto": 1991, "pago_usd": null, "status": "pendente"},
+    {"nome": "CapCut", "dia": 7, "previsto": 66, "pago_usd": null, "status": "pendente"},
+    {"nome": "Celular 9/12 Charles", "dia": 8, "previsto": 428, "pago": null, "status": "pendente"},
+    {"nome": "Claro", "dia": 10, "previsto": 260, "pago": null, "status": "pendente"},
+    {"nome": "ChatGPT", "dia": 10, "previsto": 120, "pago_usd": null, "status": "pendente"},
+    {"nome": "Claude", "dia": 16, "previsto_usd": 22.90, "pago_usd": null, "status": "pendente"},
+    {"nome": "Remedio Mainha", "dia": 20, "previsto": 220, "pago": null, "status": "pendente"},
+    {"nome": "Emprestimo Mayara 10/12", "dia": 20, "previsto": 468, "pago": null, "status": "pendente"},
+    {"nome": "Academia", "dia": 15, "previsto": 135, "pago": null, "status": "pendente"},
+    {"nome": "Canva", "dia": 24, "previsto": 35, "pago": null, "status": "pendente"},
+    {"nome": "Google One", "dia": 25, "previsto": 10, "pago": null, "status": "pendente"},
+    {"nome": "Barbearia", "dia": 31, "previsto": 130, "pago": null, "status": "pendente"}
   ],
   "a_receber": [
-    { "nome": "Gilson", "descricao": "Empréstimo via MGA Agencia Digital", "parcelas": [
-      { "data": "29/04/2026", "valor": 5000, "status": "pendente" },
-      { "data": "06/05/2026", "valor": 5000, "status": "pendente" },
-      { "data": "13/05/2026", "valor": 2500, "status": "pendente" },
-      { "data": "20/05/2026", "valor": 2500, "status": "pendente" }
+    {"nome": "Gilson", "descricao": "Emprestimo MGA Agencia Digital", "parcelas": [
+      {"data": "29/04/2026", "valor": 5000, "status": "pendente"},
+      {"data": "06/05/2026", "valor": 5000, "status": "pendente"},
+      {"data": "13/05/2026", "valor": 2500, "status": "pendente"},
+      {"data": "20/05/2026", "valor": 2500, "status": "pendente"}
     ]}
   ],
   "investimentos": [
-    { "tipo": "CDB", "emissor": "BTG Pactual", "aplicado": 18000, "saldo_bruto": 18019.53, "saldo_liquido": 18002.13, "taxa": "CDI", "vencimento": "17/04/2028", "liquidez": "D+1 a partir de 17/04/26", "rendimento_periodo": 19.53 }
+    {"tipo": "CDB", "emissor": "BTG Pactual", "aplicado": 0, "saldo_bruto": 0, "saldo_liquido": 0, "taxa": "CDI", "vencimento": "17/04/2028", "liquidez": "D+1 a partir de 17/04/26", "rendimento_periodo": 0}
   ],
   "variaveis_referencia": [
-    { "nome": "Lazer", "referencia": 1000 },
-    { "nome": "Uber", "referencia": 450 },
-    { "nome": "Combustível", "referencia": 200 },
-    { "nome": "Dieta", "referencia": 500 },
-    { "nome": "Ração Max", "referencia": 60 }
-  ],
-  "alertas": []
+    {"nome": "Lazer", "referencia": 1000},
+    {"nome": "Uber", "referencia": 450},
+    {"nome": "Combustivel", "referencia": 200},
+    {"nome": "Dieta", "referencia": 500},
+    {"nome": "Racao Max", "referencia": 60}
+  ]
 }
 \`\`\`
 
-Atualize os valores com base nos extratos enviados. Se um extrato de um mês diferente for enviado, atualize o período e os valores correspondentes.`;
+Substitua todos os zeros pelos valores reais dos extratos. Para contas_fixas: coloque status "pago" e o valor pago quando encontrar. Retorne SOMENTE o JSON acima preenchido.`
 
 // ========== RENDER DASHBOARD ==========
 function renderDashboard() {
