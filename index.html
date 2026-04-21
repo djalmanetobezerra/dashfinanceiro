@@ -324,13 +324,41 @@ const USD_NEUTRO_MIN = 4.90;   // abaixo disso: preserve os dólares
 const USD_NEUTRO_MAX = 5.20;   // acima disso: vale gastar pelo Payoneer
 
 async function loadAllData() {
-  const [hist, ac] = await Promise.all([
-    kvGet('dashboard_history'),
-    kvGet('acordos_v1')
-  ]);
-  allHistory = hist || [];
-  acordos = ac || [];
+  // 1. Carregar do localStorage imediatamente (zero latência)
+  const localHist = localStorage.getItem('dashboard_history');
+  const localAc = localStorage.getItem('acordos_v1');
+  if (localHist) allHistory = JSON.parse(localHist);
+  if (localAc) acordos = JSON.parse(localAc);
   kvReady = true;
+
+  // 2. Renderizar com dados locais imediatamente
+  renderDashboard();
+  renderAcordos();
+  renderHistorico();
+  atualizarPainelUsdDados(allHistory[0]);
+
+  // 3. Sincronizar com KV em segundo plano (uma única chamada)
+  try {
+    const remote = await kvGet('app_data');
+    if (remote) {
+      // Usar dados remotos se forem mais recentes
+      const localTs = allHistory[0]?.processedAt || '';
+      const remoteTs = remote.history?.[0]?.processedAt || '';
+      if (remoteTs > localTs || !localHist) {
+        allHistory = remote.history || [];
+        acordos = remote.acordos || [];
+        // Atualizar localStorage com dados mais recentes
+        localStorage.setItem('dashboard_history', JSON.stringify(allHistory));
+        localStorage.setItem('acordos_v1', JSON.stringify(acordos));
+        renderDashboard();
+        renderAcordos();
+        renderHistorico();
+        atualizarPainelUsdDados(allHistory[0]);
+      }
+    }
+  } catch(e) {
+    console.warn('KV sync falhou (usando cache local):', e);
+  }
 }
 
 // ========== NAVEGAÇÃO ==========
@@ -489,11 +517,12 @@ async function processFiles() {
       throw new Error('Erro ao parsear: ' + parseErr.message + ' | Inicio: ' + rawText.slice(0,100));
     }
 
-    // Salvar no histórico via KV
+    // Salvar no histórico — localStorage (rápido) + KV (nuvem)
     dashData.processedAt = new Date().toISOString();
     dashData.fileNames = uploadedFiles.map(f => f.name);
     allHistory.unshift(dashData);
-    await kvSet('dashboard_history', allHistory);
+    localStorage.setItem('dashboard_history', JSON.stringify(allHistory));
+    kvSet('app_data', { history: allHistory, acordos: acordos });
 
     // Mostrar sucesso e ir para dashboard
     setStep('build', 'done');
@@ -919,7 +948,8 @@ function loadHistorico(i) {
 // acordos carregados via KV
 
 function saveAcordos() {
-  kvSet('acordos_v1', acordos);
+  localStorage.setItem('acordos_v1', JSON.stringify(acordos));
+  kvSet('app_data', { history: allHistory, acordos: acordos });
 }
 
 function showNovoAcordo() {
@@ -1140,16 +1170,9 @@ function getAReceber() {
 
 // ========== INIT ==========
 // Mostrar loading enquanto carrega dados do KV
-document.getElementById('no-data-msg').innerHTML = `
-  <div style="font-size:40px;margin-bottom:16px">⏳</div>
-  <div style="font-size:16px;font-weight:500;margin-bottom:8px">Carregando dados...</div>
-  <div style="font-size:13px;color:var(--text2)">Buscando seu histórico na nuvem</div>
-`;
+// Dados carregam do localStorage instantaneamente — sem loading screen
 loadAllData().then(() => {
-  renderDashboard();
-  renderAcordos();
-  renderHistorico();
-  buscarCotacao(); // buscar cotação real após carregar dados
+  buscarCotacao();
 });
 </script>
 </body>
