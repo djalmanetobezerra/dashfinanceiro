@@ -318,6 +318,11 @@ async function kvSet(key, value) {
   } catch(e) { console.error('KV save error:', e); }
 }
 
+// ========== CONFIGURAÇÃO FINANCEIRA ==========
+const USD_REFERENCIA = 5.20;   // cotação de referência histórica do usuário
+const USD_NEUTRO_MIN = 4.90;   // abaixo disso: preserve os dólares
+const USD_NEUTRO_MAX = 5.20;   // acima disso: vale gastar pelo Payoneer
+
 async function loadAllData() {
   const [hist, ac] = await Promise.all([
     kvGet('dashboard_history'),
@@ -668,6 +673,8 @@ function renderDashboard() {
   const maxUsd = Math.max(...(data.categorias_payoneer || []).map(c => c.valor_usd), 1);
   const corMap = { teal: 'var(--teal)', amber: 'var(--amber)', purple: 'var(--purple)', gray: 'rgba(255,255,255,0.2)', green: 'var(--green)', blue: 'var(--blue)' };
 
+  window._dashData = data;
+  atualizarPainelUsdDados(data);
   dashDiv.innerHTML = `
     <!-- HEADER PERÍODO -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
@@ -679,19 +686,22 @@ function renderDashboard() {
     </div>
 
     <!-- USD PANEL -->
-    <div class="usd-panel" style="margin-bottom:0">
+    <div class="usd-panel" style="margin-bottom:0" id="usd-panel-dash">
       <div>
-        <div style="font-size:10px;font-family:\'DM Mono\',monospace;color:var(--amber);opacity:.7;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">USD / BRL</div>
-        <div class="usd-rate">R$ ${(data.usd_brl||4.98).toFixed(2)}</div>
+        <div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--amber);opacity:.7;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">USD / BRL</div>
+        <div class="usd-rate" id="usd-rate-valor">R$ --</div>
+        <div style="font-size:11px;color:var(--amber);opacity:.6;margin-top:4px" id="usd-rate-fonte">buscando...</div>
       </div>
       <div class="usd-divider"></div>
-      <div>
+      <div id="usd-saldo-box">
         <div style="font-size:11px;color:var(--amber);opacity:.7">Saldo Payoneer</div>
-        <div style="font-size:18px;font-weight:500;color:var(--amber);margin:4px 0">${data.contas?.find(c=>c.nome.includes('Payoneer'))?.saldo_usd ? 'USD ' + data.contas.find(c=>c.nome.includes('Payoneer')).saldo_usd.toLocaleString('pt-BR') : '—'}</div>
-        <div style="font-size:12px;color:var(--amber);opacity:.6">≈ R$ ${(data.patrimonio?.payoneer_brl||0).toLocaleString('pt-BR')}</div>
+        <div style="font-size:18px;font-weight:500;color:var(--amber);margin:4px 0" id="usd-saldo-val">USD --</div>
+        <div style="font-size:12px;color:var(--amber);opacity:.6" id="usd-saldo-brl">≈ R$ --</div>
       </div>
       <div class="usd-divider"></div>
-      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.55">Dólar em baixa — pagar pelo cartão Payoneer é mais eficiente. Gastos diretos não geram imposto.</div>
+      <div style="flex:1" id="usd-recomendacao">
+        <div style="font-size:12px;color:var(--text2);line-height:1.55">Buscando cotação...</div>
+      </div>
     </div>
 
     <!-- PATRIMÔNIO -->
@@ -817,6 +827,72 @@ function renderDashboard() {
       `).join('')}
     </div>
   `;
+}
+
+// ========== COTAÇÃO USD ==========
+async function buscarCotacao() {
+  try {
+    const r = await fetch('/api/cotacao');
+    if (!r.ok) return;
+    const d = await r.json();
+    const cotacao = d.medio || d.venda || 4.98;
+
+    // Atualizar valor exibido
+    const elValor = document.getElementById('usd-rate-valor');
+    const elFonte = document.getElementById('usd-rate-fonte');
+    const elRec = document.getElementById('usd-recomendacao');
+    if (elValor) elValor.textContent = 'R$ ' + cotacao.toFixed(2);
+    if (elFonte) elFonte.textContent = d.fonte === 'fallback' ? 'cotação estimada' : 'BCB · ' + new Date(d.data).toLocaleDateString('pt-BR');
+
+    // Calcular recomendação
+    let icone, titulo, detalhe, cor;
+    if (cotacao < USD_NEUTRO_MIN) {
+      icone = '▼';
+      titulo = 'Pague em BRL agora';
+      detalhe = 'Dólar abaixo de R$ ' + USD_NEUTRO_MIN.toFixed(2) + ' — preserve seus dólares. Use o BTG para pagar as contas do mês.';
+      cor = 'var(--red)';
+    } else if (cotacao <= USD_NEUTRO_MAX) {
+      icone = '~';
+      titulo = 'Neutro — use o BTG';
+      detalhe = 'Dólar próximo da sua referência (R$ ' + USD_REFERENCIA.toFixed(2) + '). Prefira pagar em BRL e guardar o saldo USD para quando subir.';
+      cor = 'var(--amber)';
+    } else {
+      icone = '▲';
+      titulo = 'Use o Payoneer agora';
+      detalhe = 'Dólar acima de R$ ' + USD_REFERENCIA.toFixed(2) + ' — ótimo momento para gastar pelo cartão internacional.';
+      cor = 'var(--green)';
+    }
+
+    if (elRec) {
+      elRec.innerHTML =
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+          '<span style="font-size:16px;font-weight:600;color:' + cor + '">' + icone + '</span>' +
+          '<span style="font-size:13px;font-weight:500;color:' + cor + '">' + titulo + '</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--text2);line-height:1.55">' + detalhe + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:6px">Ref. histórica: R$ ' + USD_REFERENCIA.toFixed(2) + ' · Hoje: R$ ' + cotacao.toFixed(2) + ' (' + (cotacao >= USD_REFERENCIA ? '+' : '') + ((cotacao - USD_REFERENCIA) / USD_REFERENCIA * 100).toFixed(1) + '% vs referência)</div>';
+    }
+
+    // Atualizar data.usd_brl com cotação real para cálculos
+    if (allHistory[0]) {
+      allHistory[0].usd_brl = cotacao;
+      renderDashboard();
+    }
+  } catch(e) {
+    console.error('Erro ao buscar cotação:', e);
+  }
+}
+
+// Função para atualizar campos do painel USD com dados do histórico
+function atualizarPainelUsdDados(data) {
+  if (!data) return;
+  var payUsd = (data.contas || []).find(function(c){ return c.nome && c.nome.includes('Payoneer'); });
+  var saldoUsd = payUsd ? payUsd.saldo_usd : 0;
+  var saldoBrl = data.patrimonio ? data.patrimonio.payoneer_brl : 0;
+  var el1 = document.getElementById('usd-saldo-val');
+  if (el1) el1.textContent = saldoUsd ? 'USD ' + saldoUsd.toLocaleString('pt-BR') : '---';
+  var el2 = document.getElementById('usd-saldo-brl');
+  if (el2) el2.textContent = '≈ R$ ' + (saldoBrl || 0).toLocaleString('pt-BR');
 }
 
 // ========== RENDER HISTÓRICO ==========
@@ -1073,6 +1149,7 @@ loadAllData().then(() => {
   renderDashboard();
   renderAcordos();
   renderHistorico();
+  buscarCotacao(); // buscar cotação real após carregar dados
 });
 </script>
 </body>
