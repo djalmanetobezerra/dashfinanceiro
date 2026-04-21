@@ -963,7 +963,7 @@ function renderAcordos() {
     const badge = ac.tipo === 'concedido' ? 'badge-green' : 'badge-red';
     const label = ac.tipo === 'concedido' ? 'a receber' : 'a pagar';
 
-    return \`
+    return `
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
           <div>
@@ -987,7 +987,7 @@ function renderAcordos() {
         </div>
 
         <!-- Parcelas -->
-        \${ac.parcelas.map((p, i) => \`
+        \${ac.parcelas.map((p, i) => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px">
             <div style="display:flex;align-items:center;gap:10px">
               <div onclick="toggleParcela(\${ac.id}, \${i})" style="cursor:pointer;width:20px;height:20px;border-radius:5px;border:1.5px solid \${p.status==='pago'?'var(--green)':'var(--border2)'};background:\${p.status==='pago'?'var(--green-dim)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s">
@@ -1006,13 +1006,13 @@ function renderAcordos() {
               R$ \${p.valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}
             </div>
           </div>
-        \`).join('')}
+        `).join('')}
 
         <div style="display:flex;justify-content:flex-end;margin-top:10px">
           <button onclick="excluirAcordo(\${ac.id})" style="font-size:11px;color:var(--text3);background:none;border:none;cursor:pointer;padding:4px 8px">excluir acordo</button>
         </div>
       </div>
-    \`;
+    `;
   }).join('');
 }
 
