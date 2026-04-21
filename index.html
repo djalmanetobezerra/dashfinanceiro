@@ -376,17 +376,25 @@ async function processFiles() {
     // Parsear JSON da resposta
     let dashData;
     try {
-      const m1 = rawText.match(/```json[\s\S]*?```/);
-      const m2 = rawText.match(/```[\s\S]*?```/);
-      const m3 = rawText.match(/\{[\s\S]*\}/);
-      const raw = m1 ? m1[0].replace(/```json/, '').replace(/```/, '') :
-                  m2 ? m2[0].replace(/```/g, '') :
-                  m3 ? m3[0] : null;
-      if (!raw) throw new Error('JSON não encontrado');
-      const cleaned = raw.replace(/,\s*([}\]])/g, '$1').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
-      dashData = JSON.parse(cleaned);
+      // Tentar extrair JSON - aceita com ou sem backticks
+      let raw = rawText.trim();
+      // Remover blocos markdown se existirem
+      raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/,'').trim();
+      // Se ainda nao comecar com {, tentar encontrar o JSON
+      if (!raw.startsWith('{')) {
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (!m) throw new Error('JSON nao encontrado na resposta');
+        raw = m[0];
+      }
+      // Limpar caracteres de controle mantendo newlines e tabs
+      raw = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+      // Remover trailing commas
+      raw = raw.replace(/,\s*([}\]])/g, '$1');
+      dashData = JSON.parse(raw);
     } catch(parseErr) {
-      throw new Error('Erro ao parsear resposta: ' + parseErr.message);
+      // Log para debug
+      console.error('Raw response:', rawText.slice(0, 500));
+      throw new Error('Erro ao parsear: ' + parseErr.message + ' | Inicio: ' + rawText.slice(0,100));
     }
 
     // Salvar no histórico
@@ -448,9 +456,8 @@ Você conhece o perfil financeiro do usuário:
 - Contas a receber: Gilson R$15.000 (parcelas 29/04, 06/05, 13/05, 20/05)
 Responda SEMPRE com um JSON válido dentro de blocos \`\`\`json ... \`\`\``;
 
-const ANALYSIS_PROMPT = `Analise os PDFs e retorne SOMENTE um bloco JSON válido. Nada antes, nada depois, sem explicações.
+const ANALYSIS_PROMPT = `Analise os dados dos extratos abaixo e preencha o JSON. Responda APENAS com o JSON puro, sem markdown, sem blocos de codigo, sem backticks, sem texto antes ou depois. Comece diretamente com { e termine com }.
 
-\`\`\`json
 {
   "periodo": "Abril 2026",
   "dataGeracao": "20/04/2026",
@@ -464,13 +471,13 @@ const ANALYSIS_PROMPT = `Analise os PDFs e retorne SOMENTE um bloco JSON válido
     {"nome": "Nubank BF", "descricao": "Encerrando", "saldo": 0}
   ],
   "categorias_btg": [
-    {"nome": "Casa / moradia", "valor": 0, "cor": "teal"},
+    {"nome": "Casa e moradia", "valor": 0, "cor": "teal"},
     {"nome": "Alimentacao", "valor": 0, "cor": "teal"},
     {"nome": "Transporte", "valor": 0, "cor": "teal"},
-    {"nome": "Moveis / decoracao", "valor": 0, "cor": "amber"},
-    {"nome": "Pessoal / compras", "valor": 0, "cor": "amber"},
+    {"nome": "Moveis e decoracao", "valor": 0, "cor": "amber"},
+    {"nome": "Pessoal e compras", "valor": 0, "cor": "amber"},
     {"nome": "Saude", "valor": 0, "cor": "purple"},
-    {"nome": "Beleza / bem-estar", "valor": 0, "cor": "purple"},
+    {"nome": "Beleza e bem-estar", "valor": 0, "cor": "purple"},
     {"nome": "Transferencias PJ", "valor": 0, "cor": "gray"}
   ],
   "categorias_payoneer": [
@@ -486,12 +493,12 @@ const ANALYSIS_PROMPT = `Analise os PDFs e retorne SOMENTE um bloco JSON válido
     {"nome": "YouTube Premium", "dia": 4, "previsto": 54, "pago_usd": null, "status": "pendente"},
     {"nome": "Carro Localiza", "dia": 7, "previsto": 1991, "pago_usd": null, "status": "pendente"},
     {"nome": "CapCut", "dia": 7, "previsto": 66, "pago_usd": null, "status": "pendente"},
-    {"nome": "Celular 9/12 Charles", "dia": 8, "previsto": 428, "pago": null, "status": "pendente"},
+    {"nome": "Celular Charles", "dia": 8, "previsto": 428, "pago": null, "status": "pendente"},
     {"nome": "Claro", "dia": 10, "previsto": 260, "pago": null, "status": "pendente"},
     {"nome": "ChatGPT", "dia": 10, "previsto": 120, "pago_usd": null, "status": "pendente"},
     {"nome": "Claude", "dia": 16, "previsto_usd": 22.90, "pago_usd": null, "status": "pendente"},
     {"nome": "Remedio Mainha", "dia": 20, "previsto": 220, "pago": null, "status": "pendente"},
-    {"nome": "Emprestimo Mayara 10/12", "dia": 20, "previsto": 468, "pago": null, "status": "pendente"},
+    {"nome": "Emprestimo Mayara", "dia": 20, "previsto": 468, "pago": null, "status": "pendente"},
     {"nome": "Academia", "dia": 15, "previsto": 135, "pago": null, "status": "pendente"},
     {"nome": "Canva", "dia": 24, "previsto": 35, "pago": null, "status": "pendente"},
     {"nome": "Google One", "dia": 25, "previsto": 10, "pago": null, "status": "pendente"},
@@ -516,9 +523,8 @@ const ANALYSIS_PROMPT = `Analise os PDFs e retorne SOMENTE um bloco JSON válido
     {"nome": "Racao Max", "referencia": 60}
   ]
 }
-\`\`\`
 
-Substitua todos os zeros pelos valores reais dos extratos. Para contas_fixas: coloque status "pago" e o valor pago quando encontrar. Retorne SOMENTE o JSON acima preenchido.`
+Substitua todos os zeros pelos valores reais. Para contas_fixas mude status para pago e preencha o valor quando encontrar o pagamento.`
 
 // ========== RENDER DASHBOARD ==========
 function renderDashboard() {
