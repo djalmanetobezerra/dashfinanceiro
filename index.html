@@ -174,6 +174,7 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
   <div class="tabs">
     <button class="tab active" onclick="showPage('dashboard')">Dashboard</button>
     <button class="tab" onclick="showPage('upload')">Atualizar</button>
+    <button class="tab" onclick="showPage('acordos')">Acordos</button>
     <button class="tab" onclick="showPage('historico')">Histórico</button>
   </div>
 </div>
@@ -222,6 +223,60 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
 </div>
 </div>
 
+<!-- ===== ACORDOS PAGE ===== -->
+<div id="page-acordos" class="page">
+<div class="main">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <div class="section-label" style="margin:0">Acordos e empréstimos</div>
+    <button class="process-btn" style="padding:8px 16px;font-size:13px" onclick="showNovoAcordo()">+ Novo acordo</button>
+  </div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:20px;margin-top:8px">
+    Registre empréstimos concedidos ou recebidos e marque parcelas conforme forem pagas.
+  </div>
+
+  <!-- Formulário novo acordo (oculto inicialmente) -->
+  <div id="form-acordo" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px">
+    <div style="font-size:14px;font-weight:500;margin-bottom:16px">Novo acordo</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Nome / descrição</div>
+        <input type="text" id="ac-nome" placeholder="Ex: Gilson — empréstimo" style="width:100%">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Tipo</div>
+        <select id="ac-tipo" style="width:100%;height:36px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);padding:0 10px;font-family:'DM Sans',sans-serif;font-size:13px">
+          <option value="concedido">Empréstimo concedido (a receber)</option>
+          <option value="recebido">Empréstimo recebido (a pagar)</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+      <div>
+        <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Valor total</div>
+        <input type="number" id="ac-total" placeholder="15000" style="width:100%">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Nº de parcelas</div>
+        <input type="number" id="ac-parcelas" placeholder="4" min="1" max="60" style="width:100%">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Data 1ª parcela</div>
+        <input type="date" id="ac-data" style="width:100%">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="process-btn" style="padding:8px 20px;font-size:13px" onclick="salvarAcordo()">Salvar acordo</button>
+      <button onclick="document.getElementById('form-acordo').style.display='none'" style="padding:8px 16px;font-size:13px;background:none;border:0.5px solid var(--border2);border-radius:8px;color:var(--text2);cursor:pointer">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Lista de acordos -->
+  <div id="acordos-list"></div>
+
+</div>
+</div>
+
 <!-- ===== HISTÓRICO PAGE ===== -->
 <div id="page-historico" class="page">
 <div class="main">
@@ -252,6 +307,7 @@ function showPage(name) {
   if (idx >= 0) tabs[idx].classList.add('active');
   if (name === 'dashboard') renderDashboard();
   if (name === 'historico') renderHistorico();
+  if (name === 'acordos') renderAcordos();
 }
 
 // ========== UPLOAD ==========
@@ -449,12 +505,14 @@ Você conhece o perfil financeiro do usuário:
 - 2 CNPJs: BF (encerramento em 2026, conta Payoneer USD ativa) e DBLN (principal, conta BTG)
 - Conta corrente BTG DBLN: principal movimentação PJ
 - Payoneer USD: recebe pagamentos em dólar, usa cartão internacional
-- Categorias fixas: Casa/moradia (aluguel Chirley R$1.875, remédio mainha R$220, energia, Claro, Localiza), Transporte (Uber, combustível, lava-jato), Alimentação, Assinaturas digitais (Claude, ChatGPT, YouTube, CapCut, Canva, Google One), Saúde, Móveis/decoração, Pessoal/compras, Beleza/bem-estar, Transferências PJ (celular Charles, Ipanema, Empréstimo Mayara)
-- MGA Agencia Digital = fornecedor marketing ou empréstimo Gilson
-- Sanduba do Moral = restaurante/evento
+- Categorias: Casa/moradia (aluguel Chirley R$1.875, remédio mainha R$220, energia, Claro, Localiza), Transporte (Uber, combustível, lava-jato), Alimentação, Assinaturas digitais (Claude, ChatGPT, YouTube, CapCut, Canva, Google One), Saúde, Móveis/decoração, Pessoal/compras, Beleza/bem-estar, Transferências PJ (celular Charles, Ipanema, Empréstimo Mayara)
+- MGA Agencia Digital = empréstimo Gilson (a receber R$15.000 em 4 parcelas)
+- Sanduba do Moral = devolução de boleto (não é gasto pessoal)
 - Charles Gouveia = parcela celular
-- Contas a receber: Gilson R$15.000 (parcelas 29/04, 06/05, 13/05, 20/05)
-Responda SEMPRE com um JSON válido dentro de blocos \`\`\`json ... \`\`\``;
+- ATENÇÃO CAMPOS CALCULADOS: patrimonio.total = btg_corrente + cdb_liquido + payoneer_brl + a_receber. Calcule com precisão.
+- ATENÇÃO: transferências entre contas do mesmo CNPJ NÃO são receita (ex: Nubank DBLN → BTG é transferência interna)
+- Receita real = apenas entradas de terceiros (clientes, pagamentos recebidos)
+Responda SEMPRE com JSON puro sem markdown.`;
 
 const ANALYSIS_PROMPT = `Analise os dados dos extratos abaixo e preencha o JSON. Responda APENAS com o JSON puro, sem markdown, sem blocos de codigo, sem backticks, sem texto antes ou depois. Comece diretamente com { e termine com }.
 
@@ -529,6 +587,45 @@ Substitua todos os zeros pelos valores reais. Para contas_fixas mude status para
 // ========== RENDER DASHBOARD ==========
 function renderDashboard() {
   const data = allHistory[0];
+
+  // RECALCULO AUTOMATICO — nunca confiar nos totais retornados pela IA
+  if (data) {
+    // Patrimônio: recalcular do zero
+    const btg = data.patrimonio?.btg_corrente || 0;
+    const cdb = data.patrimonio?.cdb_liquido || 0;
+    const usd = data.usd_brl || 4.98;
+    // Payoneer: preferir saldo_usd * cotacao, fallback para payoneer_brl
+    const payUsd = data.contas?.find(c => c.nome?.includes('Payoneer'))?.saldo_usd || 0;
+    const payBrl = payUsd > 0 ? Math.round(payUsd * usd * 100) / 100 : (data.patrimonio?.payoneer_brl || 0);
+    // A receber: somar parcelas pendentes
+    // A receber: usar acordos locais (mais preciso que o JSON da IA)
+    const aReceberAcordos = getAReceber();
+    const aReceberJson = (data.a_receber || []).reduce((s, ar) =>
+      s + (ar.parcelas || []).filter(p => p.status !== 'pago').reduce((ss, p) => ss + (p.valor || 0), 0), 0);
+    const aReceber = aReceberAcordos > 0 ? aReceberAcordos : aReceberJson;
+    // Total correto
+    data.patrimonio = {
+      ...data.patrimonio,
+      btg_corrente: btg,
+      cdb_liquido: cdb,
+      payoneer_brl: payBrl,
+      a_receber: aReceber,
+      total: Math.round((btg + cdb + payBrl + aReceber) * 100) / 100
+    };
+
+    // Resumo: recalcular receita e gastos pessoais
+    const totalEntradas = (data.contas || []).reduce((s, c) => s + (c.entradas || 0), 0);
+    const receitaUsd = payUsd > 0 ? 0 : 0; // receita USD já está em entradas do Nubank BF
+    if (totalEntradas > 0) data.resumo = { ...data.resumo, receita: Math.round(totalEntradas) };
+
+    // Contas fixas: recalcular totais
+    const totalPrevisto = (data.contas_fixas || []).reduce((s, c) => s + (c.previsto || 0), 0);
+    const totalPago = (data.contas_fixas || []).filter(c => c.status === 'pago').reduce((s, c) => s + (c.pago || 0), 0);
+    data._totalPrevisto = totalPrevisto;
+    data._totalPago = totalPago;
+    data._totalPendente = (data.contas_fixas || []).filter(c => c.status === 'pendente').reduce((s, c) => s + (c.previsto || 0), 0);
+  }
+
   const noMsg = document.getElementById('no-data-msg');
   const dashDiv = document.getElementById('dashboard-data');
 
@@ -709,6 +806,190 @@ function renderHistorico() {
 function loadHistorico(i) {
   allHistory.unshift(allHistory.splice(i, 1)[0]);
   showPage('dashboard');
+}
+
+// ========== ACORDOS ==========
+let acordos = JSON.parse(localStorage.getItem('acordos_v1') || '[]');
+
+function saveAcordos() {
+  localStorage.setItem('acordos_v1', JSON.stringify(acordos));
+}
+
+function showNovoAcordo() {
+  document.getElementById('form-acordo').style.display = 'block';
+  // Data padrão: próxima semana
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  document.getElementById('ac-data').value = d.toISOString().slice(0,10);
+}
+
+function salvarAcordo() {
+  const nome = document.getElementById('ac-nome').value.trim();
+  const tipo = document.getElementById('ac-tipo').value;
+  const total = parseFloat(document.getElementById('ac-total').value);
+  const numParcelas = parseInt(document.getElementById('ac-parcelas').value);
+  const dataInicial = document.getElementById('ac-data').value;
+
+  if (!nome || !total || !numParcelas || !dataInicial) {
+    alert('Preencha todos os campos'); return;
+  }
+
+  const valorParcela = Math.round((total / numParcelas) * 100) / 100;
+  const parcelas = [];
+  const dataBase = new Date(dataInicial + 'T12:00:00');
+
+  for (let i = 0; i < numParcelas; i++) {
+    const d = new Date(dataBase);
+    d.setDate(d.getDate() + (i * 7)); // semanal por padrão — ajustável
+    parcelas.push({
+      data: d.toISOString().slice(0,10),
+      valor: i === numParcelas - 1
+        ? Math.round((total - valorParcela * (numParcelas - 1)) * 100) / 100
+        : valorParcela,
+      status: 'pendente',
+      pago_em: null
+    });
+  }
+
+  // Calcular intervalo correto baseado no total de dias / parcelas
+  // Refazer com datas semanais a partir da data inicial
+  const parcelasCorretas = [];
+  for (let i = 0; i < numParcelas; i++) {
+    const d = new Date(dataInicial + 'T12:00:00');
+    d.setDate(d.getDate() + (i * 7));
+    parcelasCorretas.push({
+      data: d.toISOString().slice(0,10),
+      valor: i === numParcelas - 1
+        ? Math.round((total - valorParcela * (numParcelas - 1)) * 100) / 100
+        : valorParcela,
+      status: 'pendente',
+      pago_em: null
+    });
+  }
+
+  acordos.unshift({
+    id: Date.now(),
+    nome, tipo, total,
+    parcelas: parcelasCorretas,
+    criado_em: new Date().toISOString()
+  });
+
+  saveAcordos();
+  document.getElementById('form-acordo').style.display = 'none';
+  document.getElementById('ac-nome').value = '';
+  document.getElementById('ac-total').value = '';
+  document.getElementById('ac-parcelas').value = '';
+  renderAcordos();
+}
+
+function toggleParcela(acordoId, parcelaIdx) {
+  const ac = acordos.find(a => a.id === acordoId);
+  if (!ac) return;
+  const p = ac.parcelas[parcelaIdx];
+  if (p.status === 'pendente') {
+    p.status = 'pago';
+    p.pago_em = new Date().toISOString().slice(0,10);
+  } else {
+    p.status = 'pendente';
+    p.pago_em = null;
+  }
+  saveAcordos();
+  renderAcordos();
+  // Atualizar patrimônio no dashboard se visível
+  renderDashboard();
+}
+
+function editarDataParcela(acordoId, parcelaIdx, novaData) {
+  const ac = acordos.find(a => a.id === acordoId);
+  if (!ac) return;
+  ac.parcelas[parcelaIdx].data = novaData;
+  saveAcordos();
+}
+
+function excluirAcordo(id) {
+  if (!confirm('Excluir este acordo?')) return;
+  acordos = acordos.filter(a => a.id !== id);
+  saveAcordos();
+  renderAcordos();
+  renderDashboard();
+}
+
+function renderAcordos() {
+  const list = document.getElementById('acordos-list');
+  if (!list) return;
+
+  if (!acordos.length) {
+    list.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px 0">Nenhum acordo registrado ainda.</div>';
+    return;
+  }
+
+  list.innerHTML = acordos.map(ac => {
+    const pagas = ac.parcelas.filter(p => p.status === 'pago');
+    const pendentes = ac.parcelas.filter(p => p.status === 'pendente');
+    const totalPago = pagas.reduce((s, p) => s + p.valor, 0);
+    const totalPendente = pendentes.reduce((s, p) => s + p.valor, 0);
+    const pct = Math.round((totalPago / ac.total) * 100);
+    const cor = ac.tipo === 'concedido' ? 'var(--green)' : 'var(--red)';
+    const badge = ac.tipo === 'concedido' ? 'badge-green' : 'badge-red';
+    const label = ac.tipo === 'concedido' ? 'a receber' : 'a pagar';
+
+    return \`
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div>
+            <div style="font-size:15px;font-weight:500">\${ac.nome}</div>
+            <div style="display:flex;gap:8px;margin-top:4px;align-items:center">
+              <span class="badge \${badge}">\${label}</span>
+              <span style="font-size:11px;color:var(--text3)">\${pagas.length}/\${ac.parcelas.length} parcelas pagas</span>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:20px;font-weight:600;color:\${cor}">R$ \${ac.total.toLocaleString('pt-BR')}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">
+              Pago: R$ \${totalPago.toLocaleString('pt-BR')} · Pendente: R$ \${totalPendente.toLocaleString('pt-BR')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Barra de progresso -->
+        <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:4px;margin-bottom:14px;overflow:hidden">
+          <div style="height:100%;width:\${pct}%;background:\${cor};border-radius:3px;transition:width .4s"></div>
+        </div>
+
+        <!-- Parcelas -->
+        \${ac.parcelas.map((p, i) => \`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div onclick="toggleParcela(\${ac.id}, \${i})" style="cursor:pointer;width:20px;height:20px;border-radius:5px;border:1.5px solid \${p.status==='pago'?'var(--green)':'var(--border2)'};background:\${p.status==='pago'?'var(--green-dim)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s">
+                \${p.status==='pago'?'<span style="color:var(--green);font-size:12px">✓</span>':''}
+              </div>
+              <div>
+                <div style="color:\${p.status==='pago'?'var(--text2)':'var(--text)'};text-decoration:\${p.status==='pago'?'line-through':'none'}">
+                  Parcela \${i+1}
+                  \${p.pago_em ? '<span style="font-size:11px;color:var(--text3);margin-left:6px">pago em '+p.pago_em+'</span>' : ''}
+                </div>
+                <input type="date" value="\${p.data}" onchange="editarDataParcela(\${ac.id},\${i},this.value)"
+                  style="font-size:11px;color:var(--text3);background:none;border:none;padding:0;cursor:pointer;font-family:'DM Mono',monospace;margin-top:1px">
+              </div>
+            </div>
+            <div style="font-weight:500;color:\${p.status==='pago'?'var(--text2)':cor}">
+              R$ \${p.valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}
+            </div>
+          </div>
+        \`).join('')}
+
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
+          <button onclick="excluirAcordo(\${ac.id})" style="font-size:11px;color:var(--text3);background:none;border:none;cursor:pointer;padding:4px 8px">excluir acordo</button>
+        </div>
+      </div>
+    \`;
+  }).join('');
+}
+
+// Integrar acordos no cálculo de patrimônio
+function getAReceber() {
+  return acordos
+    .filter(a => a.tipo === 'concedido')
+    .reduce((s, a) => s + a.parcelas.filter(p => p.status === 'pendente').reduce((ss, p) => ss + p.valor, 0), 0);
 }
 
 // ========== INIT ==========
