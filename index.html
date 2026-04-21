@@ -953,67 +953,106 @@ function renderAcordos() {
     return;
   }
 
-  list.innerHTML = acordos.map(ac => {
-    const pagas = ac.parcelas.filter(p => p.status === 'pago');
-    const pendentes = ac.parcelas.filter(p => p.status === 'pendente');
-    const totalPago = pagas.reduce((s, p) => s + p.valor, 0);
-    const totalPendente = pendentes.reduce((s, p) => s + p.valor, 0);
+  list.innerHTML = '';
+
+  acordos.forEach(function(ac) {
+    const pagas = ac.parcelas.filter(function(p){ return p.status === 'pago'; });
+    const pendentes = ac.parcelas.filter(function(p){ return p.status === 'pendente'; });
+    const totalPago = pagas.reduce(function(s,p){ return s + p.valor; }, 0);
+    const totalPendente = pendentes.reduce(function(s,p){ return s + p.valor; }, 0);
     const pct = Math.round((totalPago / ac.total) * 100);
     const cor = ac.tipo === 'concedido' ? 'var(--green)' : 'var(--red)';
-    const badge = ac.tipo === 'concedido' ? 'badge-green' : 'badge-red';
+    const badgeClass = ac.tipo === 'concedido' ? 'badge-green' : 'badge-red';
     const label = ac.tipo === 'concedido' ? 'a receber' : 'a pagar';
 
-    return `
-      <div class="card" style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-          <div>
-            <div style="font-size:15px;font-weight:500">\${ac.nome}</div>
-            <div style="display:flex;gap:8px;margin-top:4px;align-items:center">
-              <span class="badge \${badge}">\${label}</span>
-              <span style="font-size:11px;color:var(--text3)">\${pagas.length}/\${ac.parcelas.length} parcelas pagas</span>
-            </div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:20px;font-weight:600;color:\${cor}">R$ \${ac.total.toLocaleString('pt-BR')}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px">
-              Pago: R$ \${totalPago.toLocaleString('pt-BR')} · Pendente: R$ \${totalPendente.toLocaleString('pt-BR')}
-            </div>
-          </div>
-        </div>
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '16px';
 
-        <!-- Barra de progresso -->
-        <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:4px;margin-bottom:14px;overflow:hidden">
-          <div style="height:100%;width:\${pct}%;background:\${cor};border-radius:3px;transition:width .4s"></div>
-        </div>
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px';
+    header.innerHTML =
+      '<div>' +
+        '<div style="font-size:15px;font-weight:500">' + ac.nome + '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:4px;align-items:center">' +
+          '<span class="badge ' + badgeClass + '">' + label + '</span>' +
+          '<span style="font-size:11px;color:var(--text3)">' + pagas.length + '/' + ac.parcelas.length + ' parcelas pagas</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="text-align:right">' +
+        '<div style="font-size:20px;font-weight:600;color:' + cor + '">R$ ' + ac.total.toLocaleString('pt-BR') + '</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:2px">' +
+          'Pago: R$ ' + totalPago.toLocaleString('pt-BR') + ' &middot; Pendente: R$ ' + totalPendente.toLocaleString('pt-BR') +
+        '</div>' +
+      '</div>';
+    card.appendChild(header);
 
-        <!-- Parcelas -->
-        \${ac.parcelas.map((p, i) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px">
-            <div style="display:flex;align-items:center;gap:10px">
-              <div onclick="toggleParcela(\${ac.id}, \${i})" style="cursor:pointer;width:20px;height:20px;border-radius:5px;border:1.5px solid \${p.status==='pago'?'var(--green)':'var(--border2)'};background:\${p.status==='pago'?'var(--green-dim)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s">
-                \${p.status==='pago'?'<span style="color:var(--green);font-size:12px">✓</span>':''}
-              </div>
-              <div>
-                <div style="color:\${p.status==='pago'?'var(--text2)':'var(--text)'};text-decoration:\${p.status==='pago'?'line-through':'none'}">
-                  Parcela \${i+1}
-                  \${p.pago_em ? '<span style="font-size:11px;color:var(--text3);margin-left:6px">pago em '+p.pago_em+'</span>' : ''}
-                </div>
-                <input type="date" value="\${p.data}" onchange="editarDataParcela(\${ac.id},\${i},this.value)"
-                  style="font-size:11px;color:var(--text3);background:none;border:none;padding:0;cursor:pointer;font-family:'DM Mono',monospace;margin-top:1px">
-              </div>
-            </div>
-            <div style="font-weight:500;color:\${p.status==='pago'?'var(--text2)':cor}">
-              R$ \${p.valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}
-            </div>
-          </div>
-        `).join('')}
+    // Barra de progresso
+    const barWrapper = document.createElement('div');
+    barWrapper.style.cssText = 'background:rgba(255,255,255,0.05);border-radius:3px;height:4px;margin-bottom:14px;overflow:hidden';
+    const barFill = document.createElement('div');
+    barFill.style.cssText = 'height:100%;width:' + pct + '%;background:' + cor + ';border-radius:3px;transition:width .4s';
+    barWrapper.appendChild(barFill);
+    card.appendChild(barWrapper);
 
-        <div style="display:flex;justify-content:flex-end;margin-top:10px">
-          <button onclick="excluirAcordo(\${ac.id})" style="font-size:11px;color:var(--text3);background:none;border:none;cursor:pointer;padding:4px 8px">excluir acordo</button>
-        </div>
-      </div>
-    `;
-  }).join('');
+    // Parcelas
+    ac.parcelas.forEach(function(p, i) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px';
+
+      const left = document.createElement('div');
+      left.style.cssText = 'display:flex;align-items:center;gap:10px';
+
+      // Checkbox
+      const check = document.createElement('div');
+      check.style.cssText = 'cursor:pointer;width:20px;height:20px;border-radius:5px;border:1.5px solid ' +
+        (p.status==='pago' ? 'var(--green)' : 'var(--border2)') +
+        ';background:' + (p.status==='pago' ? 'var(--green-dim)' : 'transparent') +
+        ';display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s';
+      if (p.status === 'pago') check.innerHTML = '<span style="color:var(--green);font-size:12px">&#10003;</span>';
+      (function(acId, idx){ check.onclick = function(){ toggleParcela(acId, idx); }; })(ac.id, i);
+
+      // Info parcela
+      const info = document.createElement('div');
+      const pagoEm = p.pago_em ? ' <span style="font-size:11px;color:var(--text3);margin-left:6px">pago em ' + p.pago_em + '</span>' : '';
+      const nomeLabel = document.createElement('div');
+      nomeLabel.style.cssText = 'color:' + (p.status==='pago' ? 'var(--text2)' : 'var(--text)') + ';text-decoration:' + (p.status==='pago' ? 'line-through' : 'none');
+      nomeLabel.innerHTML = 'Parcela ' + (i+1) + pagoEm;
+
+      const dateInput = document.createElement('input');
+      dateInput.type = 'date';
+      dateInput.value = p.data;
+      dateInput.style.cssText = 'font-size:11px;color:var(--text3);background:none;border:none;padding:0;cursor:pointer;font-family:"DM Mono",monospace;margin-top:1px';
+      (function(acId, idx){ dateInput.onchange = function(){ editarDataParcela(acId, idx, this.value); }; })(ac.id, i);
+
+      info.appendChild(nomeLabel);
+      info.appendChild(dateInput);
+      left.appendChild(check);
+      left.appendChild(info);
+
+      // Valor
+      const valor = document.createElement('div');
+      valor.style.cssText = 'font-weight:500;color:' + (p.status==='pago' ? 'var(--text2)' : cor);
+      valor.textContent = 'R$ ' + p.valor.toLocaleString('pt-BR', {minimumFractionDigits:2});
+
+      row.appendChild(left);
+      row.appendChild(valor);
+      card.appendChild(row);
+    });
+
+    // Botão excluir
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px';
+    const btnExcluir = document.createElement('button');
+    btnExcluir.textContent = 'excluir acordo';
+    btnExcluir.style.cssText = 'font-size:11px;color:var(--text3);background:none;border:none;cursor:pointer;padding:4px 8px';
+    (function(acId){ btnExcluir.onclick = function(){ excluirAcordo(acId); }; })(ac.id);
+    footer.appendChild(btnExcluir);
+    card.appendChild(footer);
+
+    list.appendChild(card);
+  });
 }
 
 // Integrar acordos no cálculo de patrimônio
